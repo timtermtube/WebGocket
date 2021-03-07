@@ -12,7 +12,7 @@ It's all codes you must write to run!
 ```golang
 package main
 
-import "github.com/timtermtube/WebGocket" // It should be in go.mod as local module or installed!
+import "github.com/timtermtube/WebGocket" // It must be installed or in go.mod as local module to import!
 
 func main() {
   WebGocket.ServerOpen(":8080", "/ws")
