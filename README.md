@@ -7,7 +7,7 @@ It's in process!
 # Documentation
 TEST BLANKS
 
-# Example
+# How to run?
 It only needs to run a server.
 ```golang
 package main
