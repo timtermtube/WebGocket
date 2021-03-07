@@ -8,7 +8,7 @@ It's in process!
 TEST BLANKS
 
 # Example
-It's only codes you must write to run!
+It only needs to run a server.
 ```golang
 package main
 
