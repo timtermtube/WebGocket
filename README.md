@@ -1,2 +1,2 @@
 # WebGocket
-It's revolution, and new dimension of websocket. "WebGocket" is the simplest websocket server in Golang.
+"WebGocket" is the simplest websocket server in Golang. Just new Experiences and the Inspiration.
