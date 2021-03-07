@@ -1,14 +1,14 @@
 # IMPORTANT!
-It's not proceed as possible to use!
+It's in process!
 
 # WebGocket
-"WebGocket" is the simplest websocket server in Golang. It's just new Experiences and the Inspiration.
+"WebGocket" is the simplest websocket server in Golang. It is revolution, and new inspiration of websocket.
 
 # Documentation
 TEST BLANKS
 
 # Example
-It's all codes you must write to run!
+It's only codes you must write to run!
 ```golang
 package main
 
