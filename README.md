@@ -8,7 +8,7 @@ It's in process!
 TEST BLANKS
 
 # How to run?
-It only needs to run a server.
+These are only codes what you need to run.
 ```golang
 package main
 
