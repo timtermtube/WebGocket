@@ -15,7 +15,7 @@ type Cert struct {
 	keyFilePath  string
 }
 
-type Eventer func(net.Conn)
+type Eventer func(net.Conn, string)
 
 var (
 	sHand = func(a string) string {
@@ -49,19 +49,24 @@ func unMasking(data []byte) []byte {
 	x := 0
 
 	for dataLocatedAt < len(data) {
-		if data[x] != 0 {
-			decoded[x] = data[dataLocatedAt] ^ masking[x%4]
+		if data[dataLocatedAt] != 0 {
+			if data[x] != 0 {
+				decoded[x] = data[dataLocatedAt] ^ masking[x%4]
+			}
 		} else {
 			break
 		}
-
 		dataLocatedAt++
 		x++
 	}
 	return decoded
 }
 
-func handShaker(conn net.Conn, err error, path string, address string) {
+func doMasking(data string) bool {
+	return true
+}
+
+func handShaker(conn net.Conn, err error, path string, address string, open Eventer, message Eventer, close Eventer) {
 	for {
 		_insideData := make([]byte, 4096)
 		conn.Read(_insideData)
@@ -72,7 +77,6 @@ func handShaker(conn net.Conn, err error, path string, address string) {
 				hdx := strings.Split(data, "\r\n")
 				for k, _ := range hdx {
 					v := hdx[k]
-
 					if strings.Index(v, "Sec-WebSocket-Key") == 0 {
 						var Key string = strings.Replace(v, "Sec-WebSocket-Key: ", wsKey, 512)
 						handshaked := []byte(sHand(HashGenerator(Key)))
@@ -82,8 +86,27 @@ func handShaker(conn net.Conn, err error, path string, address string) {
 				}
 			} else {
 				decoded := unMasking(_insideData)
-				data := string(decoded)
-				fmt.Println("This is the data:", data)
+				if _insideData[0] == 136 {
+					if _insideData[1] == 128 {
+						// .close()
+						go close(conn, "ClosedFinely")
+						conn.Close()
+						return
+					}
+				} else if _insideData[0] == 0 {
+					if _insideData[1] == 0 {
+						// Unexpected Closing
+						go close(conn, "ClosedUnexpectedly")
+						conn.Close()
+						return
+					}
+				} else {
+					// Success to Read
+					data := fmt.Sprintf("%s", decoded)
+					if strings.Index(data, "�") == -1 {
+						go message(conn, data)
+					}
+				}
 			}
 		} else {
 			return
@@ -91,7 +114,7 @@ func handShaker(conn net.Conn, err error, path string, address string) {
 	}
 }
 
-func ServerOpen(path string, address string /*, open Eventer, message Eventer, close Eventer*/) {
+func ServerOpen(path string, address string, open Eventer, message Eventer, close Eventer) {
 	if path == "" {
 		path = "/ws"
 	}
@@ -99,17 +122,16 @@ func ServerOpen(path string, address string /*, open Eventer, message Eventer, c
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("The Server is started on %s", address)
+	fmt.Printf("The Server is started on %s\n", address)
 
 	for {
 		client, err := server.Accept()
+		go open(client, "Connection")
 		if err != nil {
 			fmt.Println("Error:", err)
-		} else {
-			fmt.Printf("\nConnected from: %v\n", client.RemoteAddr())
 		}
 		go func() {
-			go handShaker(client, err, path, address)
+			go handShaker(client, err, path, address, open, message, close)
 		}()
 	}
 }
