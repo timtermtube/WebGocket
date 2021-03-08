@@ -5,33 +5,28 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	//"net/http"
 	//"strings"
 )
-
-// It will be auto-increased.
-id := 0
 
 type Cert struct {
 	certFilePath string
 	keyFilePath  string
 }
 
-// Bunch of Methods
-type _Client interface {
-}
+type Send func(string)
 
-// Real Interface of Client
+// Client is...
 type Client struct {
-	_Client
-	netClient net.Conn
-	netAddress net.Addr
-	id        int
-
+	Send       Send
+	NetClient  net.Conn
+	NetAddress net.Addr
+	Id         int
 }
 
-type Eventer func(net.Conn, string)
+type Eventer func(Client, string)
 
 var (
 	sHand = func(a string) string {
@@ -40,7 +35,10 @@ var (
 	}
 	fHand   = "HTTP/1.1 426 Upgrade Required\r\nUpgrade: WebSocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nContent-Type: text/plain\r\n\r\nThis service requires use of the WebSocket protocol\r\n"
 	uuidKey = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+	iden    = 0
 )
+
+var Users []Client
 
 func HashGenerator(str string) string {
 	h := sha1.New()
@@ -78,11 +76,81 @@ func unMasking(data []byte) []byte {
 	return decoded
 }
 
-func doMasking(data string) bool {
-	return true
+func reByte(data string) []byte {
+	beReturned := []byte(data)
+	for k, _ := range beReturned {
+		if beReturned[k] == 0 {
+			beReturned[k] = 129
+			break
+		}
+	}
+	return beReturned
 }
 
-func handShaker(conn net.Conn, err error, path string, address string, open Eventer, message Eventer, close Eventer) {
+func doMasking(data string) []byte {
+	rebyted := reByte(data)
+	opcode := byte(129)
+	l := 0
+	for k, _ := range rebyted {
+		if rebyted[k] == 0 {
+			l = k - 1
+			break
+		}
+	}
+	newData := make([]byte, 65535)
+	newData[0] = opcode
+	payloadLength := l
+	dataLocation := 0
+	if payloadLength <= 125 {
+		dataLocation = 2
+		newData[1] = byte(payloadLength)
+	} else if payloadLength >= 126 && payloadLength <= 65535 {
+		dataLocation = 4
+		newData[1] = 126
+		newData[2] = byte(payloadLength >> 8)
+		newData[3] = byte(payloadLength & 255)
+	} else if payloadLength >= 65536 {
+		dataLocation = 10
+		newData[1] = 127
+
+		// The first 32 bits
+		nine := payloadLength & 255
+		eight := payloadLength >> 8 & 255
+		seven := payloadLength >> 16 & 255
+		six := payloadLength >> 24 & 255
+		newData[9] = byte(nine)
+		newData[8] = byte(eight)
+		newData[7] = byte(seven)
+		newData[6] = byte(six)
+
+		// if the number is greater than 32bit
+		if payloadLength >= 4294967296 {
+			// Get the higher 64 bit
+			sixtyFourBit := strconv.FormatInt(int64(payloadLength), 2)
+			thirtyTwoBit := sixtyFourBit[0 : len(sixtyFourBit)-32]
+			secondThirtyTwoBits, _ := strconv.ParseInt(thirtyTwoBit, 0, 2)
+
+			newData[5] = byte((secondThirtyTwoBits) & 255)
+			newData[4] = byte((secondThirtyTwoBits >> 8) & 255)
+			newData[3] = byte((secondThirtyTwoBits >> 16) & 255)
+			newData[2] = byte((secondThirtyTwoBits >> 24) & 255)
+		} else { // if number is less than 32bit
+			newData[5] = 0
+			newData[4] = 0
+			newData[3] = 0
+			newData[2] = 0
+		}
+	}
+
+	for i := 0; i < payloadLength; i++ {
+		newData[dataLocation] = rebyted[i]
+		dataLocation++
+	}
+	//fmt.Println(newData)
+	return []byte(newData)
+}
+
+func handShaker(conn net.Conn, err error, path string, address string, open Eventer, message Eventer, close Eventer, wsc Client) {
 	for {
 		_insideData := make([]byte, 4096)
 		conn.Read(_insideData)
@@ -105,22 +173,24 @@ func handShaker(conn net.Conn, err error, path string, address string, open Even
 				if _insideData[0] == 136 {
 					if _insideData[1] == 128 {
 						// .close()
-						go close(conn, "ClosedFinely")
+						go close(wsc, "ClosedFinely")
 						conn.Close()
 						return
 					}
 				} else if _insideData[0] == 0 {
 					if _insideData[1] == 0 {
 						// Unexpected Closing
-						go close(conn, "ClosedUnexpectedly")
+						go close(wsc, "ClosedUnexpectedly")
 						conn.Close()
 						return
 					}
 				} else {
 					// Success to Read
-					data := fmt.Sprintf("%s", decoded)
+					data := string(decoded)
+					//fmt.Println(_insideData)
 					if strings.Index(data, "�") == -1 {
-						go message(conn, data)
+						fmt.Println(_insideData)
+						go message(wsc, data)
 					}
 				}
 			}
@@ -142,12 +212,18 @@ func ServerOpen(path string, address string, open Eventer, message Eventer, clos
 
 	for {
 		client, err := server.Accept()
-		go open(client, "Connection")
+		cxC := Client{func(data string) {
+			d := doMasking(data)
+			//fmt.Println(d)
+			client.Write(d)
+		}, client, client.RemoteAddr(), iden}
+		Users = append(Users, cxC)
+		iden++
+		go open(cxC, "Connection")
 		if err != nil {
 			fmt.Println("Error:", err)
 		}
-		go func() {
-			go handShaker(client, err, path, address, open, message, close)
-		}()
+		defer client.Close()
+		go handShaker(client, err, path, address, open, message, close, cxC)
 	}
 }
