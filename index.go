@@ -10,9 +10,25 @@ import (
 	//"strings"
 )
 
+// It will be auto-increased.
+id := 0
+
 type Cert struct {
 	certFilePath string
 	keyFilePath  string
+}
+
+// Bunch of Methods
+type _Client interface {
+}
+
+// Real Interface of Client
+type Client struct {
+	_Client
+	netClient net.Conn
+	netAddress net.Addr
+	id        int
+
 }
 
 type Eventer func(net.Conn, string)
