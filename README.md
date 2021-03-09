@@ -1,5 +1,5 @@
-# IMPORTANT!
-It's in process!
+# NOTICE
+It is outdated project.
 
 # WebGocket
 "WebGocket" is the simplest websocket server in Golang. It is revolution, and new inspiration of websocket.
